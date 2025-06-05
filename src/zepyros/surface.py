@@ -24,26 +24,27 @@ class Surface:
     theta_max : float
     real_br : array
     """
+
     # TODO: add documentation
     def __init__(self, surface, patch_num=5, r0=11, theta_max=45, real_br=None):
         if real_br is None:
             real_br = []
 
         # TODO: read_surface does not exist
-        if isinstance(surface, str):    # if type(surface) == str:
+        if isinstance(surface, str):  # if type(surface) == str:
             self.surface = self.read_surface(surface)
         else:
             self.surface = surface
 
-        self.patch_num = patch_num      # number of patches to create
-        self.r0 = r0                    # radius of the sphere to build the patch
-        self.theta_max = theta_max      # maximum degree of the cone
+        self.patch_num = patch_num  # number of patches to create
+        self.r0 = r0  # radius of the sphere to build the patch
+        self.theta_max = theta_max  # maximum degree of the cone
 
         self.radius_of_cylinder = 2
         self.threshold_on_layers = 5
 
         if len(real_br) != 0:
-            self.real_br = real_br      # saving the mask     #self.surface[real_br,:]
+            self.real_br = real_br  # saving the mask     #self.surface[real_br,:]
         else:
             self.real_br = []
 
@@ -88,7 +89,7 @@ class Surface:
         p = plane.copy()
 
         while nx < 400:
-            tmp = np.zeros((nx*2, ny*2))
+            tmp = np.zeros((nx * 2, ny * 2))
             tmp[::2, ::2] = p
             tmp[1::2, ::2] = p
             tmp[::2, 1::2] = p
@@ -117,10 +118,12 @@ class Surface:
             - the points on the surface belonging to the patch (`ndarray`)
             - the indices of the surface points belonging to the patch (`ndarray`)
         """
-        d2 = (self.surface[:, 0] - self.surface[point_ndx, 0])**2 + (self.surface[:, 1] - self.surface[point_ndx, 1])**2 + (self.surface[:, 2] - self.surface[point_ndx, 2])**2
+        d2 = (self.surface[:, 0] - self.surface[point_ndx, 0]) ** 2 + (
+                    self.surface[:, 1] - self.surface[point_ndx, 1]) ** 2 + (
+                         self.surface[:, 2] - self.surface[point_ndx, 2]) ** 2
 
         # mask = self.distance_matrix[point_pos, :] <= self.r0
-        mask = d2 <= self.r0**2
+        mask = d2 <= self.r0 ** 2
         patch_points = self.surface[mask, :]
 
         # processing patch to remove islands
@@ -130,7 +133,7 @@ class Surface:
         pos_ = np.where(counts == np.max(counts))[0][0]
         lab_ = val[pos_]
 
-        mmm = np.ones(len(mask))*-1000.
+        mmm = np.ones(len(mask)) * -1000.
         mmm[mask] = index_
         new_mask = mmm == lab_
 
@@ -146,14 +149,14 @@ class Surface:
         # finding center of rotated patch
         cm = np.mean(rot_p[:, :3], axis=0)
 
-        r = self.radius_of_cylinder         # AA the cylinder radius
-        thresh = self.threshold_on_layers    # AA the threshold for different layers
+        r = self.radius_of_cylinder  # AA the cylinder radius
+        thresh = self.threshold_on_layers  # AA the threshold for different layers
 
         # translating surface to patch center
         rot_a[:, :3] -= cm
 
         # finding points inside a cylinder of radius R having center in the origin and height along the z axis
-        d = np.sqrt(rot_a[:, 0]**2 + rot_a[:, 1]**2)
+        d = np.sqrt(rot_a[:, 0] ** 2 + rot_a[:, 1] ** 2)
         # finding points of the surface inside the cylinder but not belonging to the patch
         mask = np.logical_and(d <= r, np.logical_not(patch_mask))
 
@@ -209,7 +212,7 @@ class Surface:
     def create_plane(self, patch, z_c, n_p=20):
         # TODO: add documentation
         _, lc = np.shape(patch)
-        
+
         rot_p = patch.copy()
 
         # computing geometrical center
@@ -219,16 +222,16 @@ class Surface:
         rot_p[:, 2] -= z_c
 
         # computing distances between points and the origin
-        weights = np.sqrt(rot_p[:, 0]**2 + rot_p[:, 1]**2 + rot_p[:, 2]**2)
+        weights = np.sqrt(rot_p[:, 0] ** 2 + rot_p[:, 1] ** 2 + rot_p[:, 2] ** 2)
 
         # computing angles
         thetas = np.arctan2(rot_p[:, 1], rot_p[:, 0])
 
         # computing distances in plane
-        dist_plane = np.sqrt(rot_p[:, 0]**2 + rot_p[:, 1]**2)
+        dist_plane = np.sqrt(rot_p[:, 0] ** 2 + rot_p[:, 1] ** 2)
 
         # computing the circle radius as the maximum distant point..
-        r = np.max(dist_plane)*1.01
+        r = np.max(dist_plane) * 1.01
 
         # creating plane matrix
         if lc == 3:
@@ -239,9 +242,9 @@ class Surface:
         rot_p[:, 0] += r
         rot_p[:, 1] -= r
 
-        pos_plane = rot_p[:, :2]    # np.abs(rot_p[:,:2])
+        pos_plane = rot_p[:, :2]  # np.abs(rot_p[:,:2])
 
-        dr = 2.*r/n_p
+        dr = 2. * r / n_p
         rr_x = 0
         rr_y = 0
         for i in range(n_p):
@@ -256,11 +259,94 @@ class Surface:
                         plane[j, i] = w
                     else:
                         w_el = np.mean(patch[mask, 3])
-                        plane[j, i] = w + 1j*w_el
+                        plane[j, i] = w + 1j * w_el
                 rr_y += dr
             rr_x += dr
 
         return plane, weights, dist_plane, thetas
+
+
+
+    def create_plane_electrostatic(self, patch, weigths, z_c, n_p=20):
+        '''
+        DISCLAIMER: Variazioni minime rispetto a create_plane, ho solo eliminato dei calcoli che non mi servivano e
+        aggiunto tra i parametri i valori del potenziale elettrico dato che qua mi interessa proiettare sul
+        piano non la posizione dei punti della patch ma appunto il loro potenziale.
+
+        Given the coordinates and electrostatic potential values of the points composing a patch,
+        the projection on a 2D matrix of the electrostatic is obtained.
+
+        Parameters
+        ----------
+        `patch`: ndarray or pandas
+            coordinate array of ``x``, ``y``, ``z`` points and ``nx``, ``ny`` and ``nz`` unit vectors
+
+        `weigths`: ndarray
+             electrostatic potential computed at each point of patch
+
+        `z_c`: ndarray
+            origin of the cone on which tha patch is built
+
+        `n_p`: int
+            dimension of the matrix on which che patch is projected
+
+        Return
+        ------
+        `plane`
+            projection of the patche's electrostatic potential
+                    '''
+
+        _, lc = np.shape(patch)
+
+        rot_p = patch.copy()
+
+
+        # shifting patch to have the cone origin in [0,0,0]...
+        rot_p[:, 2] -= z_c
+
+        # computing distances in plane..
+        dist_plane = np.sqrt(rot_p[:, 0] ** 2 + rot_p[:, 1] ** 2)
+
+        # computing the circle radius as the maximum distant point..
+        r = np.max(dist_plane) * 1.01
+
+        # creating plane matrix..
+        if (lc == 3):
+            plane = np.zeros((n_p, n_p))
+        else:
+            plane = np.zeros((n_p, n_p), dtype=np.complex)
+        # adapting points to pixels..
+        rot_p[:, 0] += r
+        rot_p[:, 1] -= r
+
+        pos_plane = rot_p[:, :2]  # np.abs(rot_p[:,:2])
+
+        dR = 2. * r / n_p
+        rr_x = 0
+        rr_y = 0
+        for i in range(n_p):
+            rr_y = 0
+            for j in range(n_p):
+                mask_x = np.logical_and(pos_plane[:, 0] > rr_x, pos_plane[:, 0] <= rr_x + dR)
+                mask_y = np.logical_and(pos_plane[:, 1] < -rr_y, pos_plane[:, 1] >= -(rr_y + dR))
+                mask = np.logical_and(mask_x, mask_y)
+                if (len(weigths[mask]) > 0):
+                    w = np.mean(weigths[mask])
+                    if (lc == 3):
+                        plane[j, i] = w
+                    else:
+                        w_el = np.mean(patch[mask, 3])
+                        plane[j, i] = w + 1j * w_el
+
+                rr_y += dR
+            rr_x += dR
+
+        return plane
+
+
+
+
+
 
     def find_origin(self, rotated_patch, check=0):
         """
@@ -279,7 +365,7 @@ class Surface:
         rot = rotated_patch.copy()
 
         # computing distances of points from the origin (geometrical center) in the xy plane
-        dist_in_plane = np.sqrt(rot[:, 0]**2 + rot[:, 1]**2)
+        dist_in_plane = np.sqrt(rot[:, 0] ** 2 + rot[:, 1] ** 2)
 
         # finding point with maximum distance
         max_dist = np.max(dist_in_plane)
@@ -343,13 +429,13 @@ class Surface:
         xl, yl = np.shape(plane)
 
         # defining radius
-        r = int((xl-1)/2.)
+        r = int((xl - 1) / 2.)
 
         # defining radial
-        x, y = np.meshgrid(np.arange(-r, r+1), np.arange(-r, r+1))
+        x, y = np.meshgrid(np.arange(-r, r + 1), np.arange(-r, r + 1))
         # r_mat = x**2 + np.flip(y, axis=0)**2
-        r_mat = x**2 + flip_matrix(y, axis=0)**2
-        r2 = r**2
+        r_mat = x ** 2 + flip_matrix(y, axis=0) ** 2
+        r2 = r ** 2
 
         # defining mask
         tmp = np.zeros((3, 3))
@@ -360,7 +446,7 @@ class Surface:
 
         list_x, list_y = np.where(plane == 0)
         l_x = len(list_x)
-        l_x_old = 2*l_x
+        l_x_old = 2 * l_x
         count = 0
 
         while l_x < l_x_old:
@@ -381,7 +467,7 @@ class Surface:
                     if count >= 6:
                         tmp = plane[xx, yy]
                         l__ = np.sum(tmp > 0)
-                        tmp = np.sum(tmp)/l__
+                        tmp = np.sum(tmp) / l__
                         plane[x, y] = tmp
 
             list_x, list_y = np.where(plane == 0)
@@ -392,13 +478,19 @@ class Surface:
 
         return plane
 
-    def fill_gap_everywhere(self, plane_):
+    def fill_gap_everywhere(self, plane_,shape):
         """
+        DISCLAIMAR: Ho solo aggiunto un parametro input, perche' quando creo le matrici con le proiezioni
+        mi e' piu' comodo avere i pixel esterni a Nan invece che 0.
+
         This function fills the gaps (pixel with zero value) in the unit circle of a NxN plane.
         It replaces the zero pixel with the mean of the nearby pixels.
         Input:
         - plane (square matrix)
-        
+        -type:
+            if shape=1 : The matrix contains the shape projection -> External pixels are set to 0
+            if shape=0 :  The matrix contains the electrostatic projection -> External pixels are set to Nan
+
         Output:
         - Filled plane
         """
@@ -407,11 +499,11 @@ class Surface:
 
         xl, yl = np.shape(plane)
 
-        r = int((xl-1)/2.)
+        r = int((xl - 1) / 2.)
 
-        x, y = np.meshgrid(np.arange(-r, r+1), np.arange(-r, r+1))
-        r_mat = x**2 + flip_matrix(y, axis=0)**2
-        r2 = r**2
+        x, y = np.meshgrid(np.arange(-r, r + 1), np.arange(-r, r + 1))
+        r_mat = x ** 2 + flip_matrix(y, axis=0) ** 2
+        r2 = r ** 2
 
         tmp = np.zeros((3, 3))
         x_, y_ = np.where(tmp == 0)
@@ -432,13 +524,13 @@ class Surface:
 
                 if r_mat[x, y] < r2:
                     if (
-                        (plane[x+1, y] != 0 and plane[x-1, y] != 0) or
-                        (plane[x, y+1] != 0 and plane[x, y-1] != 0)
+                            (plane[x + 1, y] != 0 and plane[x - 1, y] != 0) or
+                            (plane[x, y + 1] != 0 and plane[x, y - 1] != 0)
                     ):
                         tmp = plane[x_ + x, y_ + y]
 
                         l__ = np.sum(tmp != 0)
-                        tmp = np.sum(tmp)/l__
+                        tmp = np.sum(tmp) / l__
                         plane[x, y] = tmp
 
             list_x, list_y = np.where(plane == 0)
@@ -448,14 +540,14 @@ class Surface:
                 y = list_y[i]
 
                 if r_mat[x, y] < r2:
-                    if(
-                        (plane[x+1, y+1] != 0 and plane[x-1, y-1] != 0) or
-                        (plane[x-1, y+1] != 0 and plane[x+1, y-1] != 0)
+                    if (
+                            (plane[x + 1, y + 1] != 0 and plane[x - 1, y - 1] != 0) or
+                            (plane[x - 1, y + 1] != 0 and plane[x + 1, y - 1] != 0)
                     ):
                         tmp = plane[x_ + x, y_ + y]
 
                         l__ = np.sum(tmp != 0)
-                        tmp = np.sum(tmp)/l__
+                        tmp = np.sum(tmp) / l__
                         plane[x, y] = tmp
             count += 1
 
@@ -479,28 +571,40 @@ class Surface:
                     l__ = np.sum(tmp != 0)
                     if l__ == 0:
                         l__ = 1
-                    tmp = np.sum(tmp)/l__
+                    tmp = np.sum(tmp) / l__
                     plane[x, y] = tmp
             count += 1
 
-        plane[r_mat > r2] = 0
+        if shape==0:
+            plane[r_mat > r2] = 'Nan'
+        else:
+            plane[r_mat > r2] = 0
 
         return plane
 
     def patch_reorient(self, patch_points, verso):
         # TODO: add documentation. Maybe staticmethod?
+        '''
+            This function rotates a set of given points in order to have the xy plane perpendicular to the mean point versor.
+            Input:
+            - point matrix, a Nx6 matrix with x,y,z (coordinates) and u,v,w (normal versors);
+            Output:
+            - rot_patch, rotated patch points;
+            - rot_normal_vec, rotated patch normal versors.
+        '''
+
         ll = np.shape(patch_points)[0]
-    
+
         mean_v = np.mean(patch_points[:, 3:6], axis=0)
         pin = np.mean(patch_points[:, :3], axis=0)
-    
+
         # res, c11 = concatenate_fig_plots(list_=[patch_points[:, :3], patch_points[:, :3] + patch_points[:, 3:6]])
         #
         # phi, rot_patch_all = rotate_patch(res[:, :3], mean_v, verso, pin)
         res = np.vstack([patch_points[:, :3], patch_points[:, :3] + patch_points[:, 3:6]])
         phi, rot_patch_all = rotate_patch(res[:, :3], mean_v, verso, pin)
-    
+
         rot_patch = rot_patch_all[:ll, :3]
         rot_normal_vec = rot_patch_all[ll:, :3] - rot_patch
-    
+
         return rot_patch, rot_normal_vec
